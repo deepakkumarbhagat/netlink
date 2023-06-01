@@ -671,6 +671,30 @@ func (h *Handle) LinkSetVfGUID(link Link, vf int, vfGuid net.HardwareAddr, guidT
 	return err
 }
 
+func LinkSetTTL(link Link, ttl uint8) error {
+	return pkgHandle.LinkSetTTL(link, ttl)
+}
+
+func (h *Handle) LinkSetTTL(link Link, ttl uint8) error {
+	base := link.Attrs()
+	h.ensureIndex(base)
+	req := h.newNetlinkRequest(unix.RTM_SETLINK, unix.NLM_F_ACK)
+
+	msg := nl.NewIfInfomsg(unix.AF_UNSPEC)
+	msg.Index = int32(base.Index)
+	req.AddData(msg)
+
+	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
+	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated(link.Type()))
+
+	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
+	data.AddRtAttr(nl.IFLA_GRE_TTL, nl.Uint8Attr(gre.Ttl))
+	req.AddData(linkInfo)
+
+	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
+	return err
+}
+
 // LinkSetMaster sets the master of the link device.
 // Equivalent to: `ip link set $link master $master`
 func LinkSetMaster(link Link, master *Bridge) error {
