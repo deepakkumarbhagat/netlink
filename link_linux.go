@@ -689,11 +689,10 @@ func (h *Handle) LinkSetTTL(link Link, ttl uint8) error {
 
 	switch link := link.(type) {
 	case *Gretun:
+		link.Ttl = ttl
 		addGretunAttrs(link, linkInfo)
 	}
 
-	//	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
-	//	data.AddRtAttr(nl.IFLA_GRE_TTL, nl.Uint8Attr(ttl))
 	req.AddData(linkInfo)
 
 	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
