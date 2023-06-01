@@ -687,8 +687,10 @@ func (h *Handle) LinkSetTTL(link Link, ttl uint8) error {
 	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
 	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated(link.Type()))
 
-	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
-	data.AddRtAttr(nl.IFLA_GRE_TTL, nl.Uint8Attr(ttl))
+	addGretunAttrs(link, linkInfo)
+
+	//	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
+	//	data.AddRtAttr(nl.IFLA_GRE_TTL, nl.Uint8Attr(ttl))
 	req.AddData(linkInfo)
 
 	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
