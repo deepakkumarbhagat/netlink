@@ -1048,7 +1048,7 @@ func LinkTrueUpdate(link Link) error {
 // are taken from the parameters in the link object.
 // Equivalent to: `ip link add $link`
 func (h *Handle) LinkTrueUpdate(link Link) error {
-	return h.linkModify(link, unix.NLM_F_CREATE|unix.NLM_F_REPLACE|unix.NLM_F_ACK)
+	return h.linkModify(link, unix.NLM_F_REPLACE|unix.NLM_F_ACK)
 }
 
 func (h *Handle) linkModify(link Link, flags int) error {
