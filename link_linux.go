@@ -1048,7 +1048,131 @@ func LinkTrueUpdate(link Link) error {
 // are taken from the parameters in the link object.
 // Equivalent to: `ip link add $link`
 func (h *Handle) LinkTrueUpdate(link Link) error {
-	return h.linkModify(link, unix.NLM_F_REPLACE|unix.NLM_F_ACK)
+	return h.linkModify1(link, unix.NLM_F_CREATE|unix.NLM_F_REPLACE|unix.NLM_F_ACK)
+}
+
+func (h *Handle) linkModify1(link Link, flags int) error {
+	// TODO: support extra data for macvlan
+	base := link.Attrs()
+
+	req := h.newNetlinkRequest(unix.RTM_NEWLINK, flags)
+
+	msg := nl.NewIfInfomsg(unix.AF_UNSPEC)
+	// TODO: make it shorter
+	if base.Flags&net.FlagUp != 0 {
+		msg.Change = unix.IFF_UP
+		msg.Flags = unix.IFF_UP
+	}
+	if base.Flags&net.FlagBroadcast != 0 {
+		msg.Change |= unix.IFF_BROADCAST
+		msg.Flags |= unix.IFF_BROADCAST
+	}
+	if base.Flags&net.FlagLoopback != 0 {
+		msg.Change |= unix.IFF_LOOPBACK
+		msg.Flags |= unix.IFF_LOOPBACK
+	}
+	if base.Flags&net.FlagPointToPoint != 0 {
+		msg.Change |= unix.IFF_POINTOPOINT
+		msg.Flags |= unix.IFF_POINTOPOINT
+	}
+	if base.Flags&net.FlagMulticast != 0 {
+		msg.Change |= unix.IFF_MULTICAST
+		msg.Flags |= unix.IFF_MULTICAST
+	}
+	if base.Index != 0 {
+		msg.Index = int32(base.Index)
+	}
+
+	req.AddData(msg)
+
+	if base.ParentIndex != 0 {
+		b := make([]byte, 4)
+		native.PutUint32(b, uint32(base.ParentIndex))
+		data := nl.NewRtAttr(unix.IFLA_LINK, b)
+		req.AddData(data)
+	} else if link.Type() == "ipvlan" || link.Type() == "ipoib" {
+		return fmt.Errorf("Can't create %s link without ParentIndex", link.Type())
+	}
+
+	nameData := nl.NewRtAttr(unix.IFLA_IFNAME, nl.ZeroTerminated(base.Name))
+	req.AddData(nameData)
+
+	if base.MTU > 0 {
+		mtu := nl.NewRtAttr(unix.IFLA_MTU, nl.Uint32Attr(uint32(base.MTU)))
+		req.AddData(mtu)
+	}
+
+	if base.TxQLen >= 0 {
+		qlen := nl.NewRtAttr(unix.IFLA_TXQLEN, nl.Uint32Attr(uint32(base.TxQLen)))
+		req.AddData(qlen)
+	}
+
+	if base.HardwareAddr != nil {
+		hwaddr := nl.NewRtAttr(unix.IFLA_ADDRESS, []byte(base.HardwareAddr))
+		req.AddData(hwaddr)
+	}
+
+	if base.NumTxQueues > 0 {
+		txqueues := nl.NewRtAttr(unix.IFLA_NUM_TX_QUEUES, nl.Uint32Attr(uint32(base.NumTxQueues)))
+		req.AddData(txqueues)
+	}
+
+	if base.NumRxQueues > 0 {
+		rxqueues := nl.NewRtAttr(unix.IFLA_NUM_RX_QUEUES, nl.Uint32Attr(uint32(base.NumRxQueues)))
+		req.AddData(rxqueues)
+	}
+
+	if base.GSOMaxSegs > 0 {
+		gsoAttr := nl.NewRtAttr(unix.IFLA_GSO_MAX_SEGS, nl.Uint32Attr(base.GSOMaxSegs))
+		req.AddData(gsoAttr)
+	}
+
+	if base.GSOMaxSize > 0 {
+		gsoAttr := nl.NewRtAttr(unix.IFLA_GSO_MAX_SIZE, nl.Uint32Attr(base.GSOMaxSize))
+		req.AddData(gsoAttr)
+	}
+
+	if base.Group > 0 {
+		groupAttr := nl.NewRtAttr(unix.IFLA_GROUP, nl.Uint32Attr(base.Group))
+		req.AddData(groupAttr)
+	}
+
+	if base.Namespace != nil {
+		var attr *nl.RtAttr
+		switch ns := base.Namespace.(type) {
+		case NsPid:
+			val := nl.Uint32Attr(uint32(ns))
+			attr = nl.NewRtAttr(unix.IFLA_NET_NS_PID, val)
+		case NsFd:
+			val := nl.Uint32Attr(uint32(ns))
+			attr = nl.NewRtAttr(unix.IFLA_NET_NS_FD, val)
+		}
+
+		req.AddData(attr)
+	}
+
+	if base.Xdp != nil {
+		addXdpAttrs(base.Xdp, req)
+	}
+
+	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
+	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated(link.Type()))
+
+	switch link := link.(type) {
+	case *Gretun:
+		addGretunAttrs(link, linkInfo)
+	}
+
+	req.AddData(linkInfo)
+
+	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
+	if err != nil {
+		return err
+	}
+
+	h.ensureIndex(base)
+
+	return nil
 }
 
 func (h *Handle) linkModify(link Link, flags int) error {
