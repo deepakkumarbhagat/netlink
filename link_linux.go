@@ -1040,14 +1040,14 @@ func (h *Handle) LinkAdd(link Link) error {
 // LinkAdd adds a new link device. The type and features of the device
 // are taken from the parameters in the link object.
 // Equivalent to: `ip link add $link`
-func LinkUpdate(link Link) error {
-	return pkgHandle.LinkUpdate(link)
+func LinkTrueUpdate(link Link) error {
+	return pkgHandle.LinkTrueUpdate(link)
 }
 
 // LinkAdd adds a new link device. The type and features of the device
 // are taken from the parameters in the link object.
 // Equivalent to: `ip link add $link`
-func (h *Handle) LinkUpdate(link Link) error {
+func (h *Handle) LinkTrueUpdate(link Link) error {
 	return h.linkModify(link, unix.NLM_F_CREATE|unix.NLM_F_REPLACE|unix.NLM_F_ACK)
 }
 
